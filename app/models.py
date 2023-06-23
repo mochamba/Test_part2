@@ -1,4 +1,4 @@
-from sqlalchemy import LargeBinary, String, Integer, Column
+from sqlalchemy import String, Integer, Column
 from dotenv import load_dotenv
 from sqlalchemy.orm import DeclarativeBase
 
@@ -21,7 +21,6 @@ class File(Base):
     __tablename__ = "files"
 
     id = Column(Integer, primary_key=True)
-    uuid_token = Column(String())
+    user_token = Column(String())
     user_id = Column(Integer)
-    file = Column(LargeBinary, nullable=False)
-    filename = Column(String(100), nullable=False)
+    file_path = Column(String)

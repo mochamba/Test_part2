@@ -3,7 +3,6 @@ from pydub import AudioSegment
 from sqlalchemy.orm import Session
 from app.connect import engine
 from sqlalchemy import select
-import os
 from app import models
 
 

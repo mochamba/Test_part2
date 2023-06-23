@@ -1,14 +1,13 @@
-from io import BytesIO
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from uuid import uuid4
-from pydub import AudioSegment
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.connect import engine, base_url
-from . import models
-# создание таблицы в базе данных
+from app import models, methods
 
+
+# создание таблицы в базе данных
 models.Base.metadata.create_all(engine)
 
 app = FastAPI(title='web_converter')
@@ -32,48 +31,41 @@ def post_username(username: str):
 @app.post("/upload", tags=["Upload"], response_model=None)
 def upload_file(user_id: int, user_token: str, upload_file: UploadFile):
     """Загрузка файла для конвертирования"""
-    user = check_user(user_id, user_token)
+    user = methods.check_user(user_id, user_token)
 
     if user:
         # Проверка файла
         if upload_file.content_type != 'audio/wav':
             raise HTTPException(
-                400, detail='Неверный формат файла, загрузите файл .vaw'
+                400, detail='Неверный формат файла, загрузите файл .wav'
             )
+
         try:
             # Конвертация в .mp3
-            mp3_file = converter(upload_file)
+            saved_name = methods.new_filename()
+            mp3_path = methods.converter(upload_file, saved_name)
             # Сохранение
             new_file = models.File(
-                uuid_token=str(uuid4()),
-                user_id=user.id,
-                file=mp3_file.read(),
-                filename=new_filename(upload_file)
+                user_token=user_token,
+                user_id=user_id,
+                file_path=mp3_path,
                 )
-            print(new_file.uuid_token)
-            print(new_file.user_id)
-            print(type(new_file.file))
-            print(new_file.filename)
             with Session(engine) as session:
                 session.add(new_file)
                 session.commit()
+                # Сборка ссылки
+                print(new_file.user_id)
+                params = f'?id={new_file.id}&user={new_file.user_id}'
+                print(params)
                 session.close()
-
-            # Сборка ссылки
-            '''http://host:port/record?id=id_записи&user=id_пользователя.'''
-            params = f'?id={new_file.id}&user={new_file.user_id}'
-            download_link = base_url + 'record/' + params
-            final = models.FinalFile(
-                record_id=new_file.id,
-                user_id=new_file.user_id,
-                download_link=download_link
-                )
-            return final
+                download_link = f"{base_url}/record/{params}"
+            print(download_link)
+            return download_link
         except Exception:
             raise HTTPException(status_code=500, detail={
                 'status': 'error',
                 'data': None,
-                'details': 'Что-то сломалось'
+                'details': 'Что-то сломалось При сохранении'
             })
     else:
         raise HTTPException(
@@ -83,53 +75,18 @@ def upload_file(user_id: int, user_token: str, upload_file: UploadFile):
 
 
 @app.get("/record", tags=["download"])
-def download_file(file_id: int, user_id: int):
+def download_file(id: int, user: int):
     """Загрузка записи """
     '''http://host:port/record?id=id_записи&user=id_пользователя.'''
     with Session(engine) as session:
         file_data = session.execute(select(models.File).where(
-            models.File.id == file_id, models.File.user_id == user_id
+            models.File.id == id, models.File.user_id == user
             )).scalar_one()
         session.close()
 
     if file_data:
-
-        headers = {
-            'Content-Disposition': f'attachment; filename="{file_data.filename}"',
-            'Content-Type': 'audio/mp3',
-            'Access-Control-Expose-Headers': 'Content-Disposition'
-        }
-        return FileResponse(path=file_data.file)
+        return FileResponse(path=file_data.file_path)
     else:
         raise HTTPException(
             400, detail='Audio file with this parameters does not exists.'
         )
-
-
-def converter(input_file):
-    '''Конвертация wav файла в mp3'''
-    file = BytesIO()
-    wav_file = AudioSegment.from_file(input_file.file, format='wav')
-    mp3_file = wav_file.export(file, format='mp3')
-    return mp3_file
-
-
-def new_filename(file: UploadFile) -> str:
-    """Задает новое имя файла"""
-    file_name = file.filename
-    if file_name[-4:] == '.wav':
-        new_name = file_name.replace('.wav', '.mp3')
-    else:
-        new_name = file_name + '.mp3'
-    return new_name
-
-
-def check_user(user_id: int, user_uuid_token: uuid4):
-    """Проверка наличия пользователя в базе"""
-    with Session(engine) as session:
-        user = session.execute(select(models.User).where(
-            models.User.id == user_id,
-            models.User.uuid_token == user_uuid_token
-            )).scalar_one_or_none()
-        session.close
-    return user

@@ -3,15 +3,16 @@ from os import getenv
 from dotenv import load_dotenv
 load_dotenv()
 
-host = getenv('POSTGRES_HOST')
-port = getenv('POSTGRES_PORT')
+host = getenv('APP_HOST')
+port = getenv('APP_PORT')
+
 base_url = f"http://{host}:{port}"
 
 url_string = URL.create(
         'postgresql+pg8000',
         username=getenv('POSTGRES_USER'),
         password=getenv('POSTGRES_PASSWORD'),
-        host=host,
+        host=getenv('POSTGRES_HOST'),
         database=getenv('DATABASE')
             )
 
